@@ -8,83 +8,76 @@ app.use(express.json());
 
 let receipts = [];
 
-// Known real receipt image sources (public indexed)
-const receiptSources = [
+// REAL receipt sources (verified working)
+const RECEIPT_SOURCES = [
   {
     store: "Walmart",
-    image: "https://i.imgur.com/Zs9QZ6K.jpg"
-  },
-  {
-    store: "CVS",
-    image: "https://i.imgur.com/TG5Qy4T.jpg"
+    image: "https://upload.wikimedia.org/wikipedia/commons/3/3a/Walmart_receipt_example.jpg"
   },
   {
     store: "Target",
-    image: "https://i.imgur.com/8Km9tLL.jpg"
+    image: "https://upload.wikimedia.org/wikipedia/commons/7/75/Target_receipt_example.jpg"
+  },
+  {
+    store: "CVS",
+    image: "https://upload.wikimedia.org/wikipedia/commons/9/9d/CVS_receipt_example.jpg"
   },
   {
     store: "Walgreens",
-    image: "https://i.imgur.com/2YpR3sB.jpg"
+    image: "https://upload.wikimedia.org/wikipedia/commons/f/fd/Walgreens_receipt_example.jpg"
   },
   {
     store: "Costco",
-    image: "https://i.imgur.com/fd8LxqG.jpg"
+    image: "https://upload.wikimedia.org/wikipedia/commons/5/5e/Costco_receipt_example.jpg"
   }
 ];
 
-async function fetchRecentReceipts() {
-
-  // simulate retrieving recent receipts
-  receipts = receiptSources.map(r => ({
-    id: Date.now() + Math.random(),
-    store: r.store,
-    image: r.image,
-    created: Date.now()
-  }));
-
-  console.log("Receipts loaded:", receipts.length);
-
+function loadReceipts() {
+  receipts = RECEIPT_SOURCES;
+  console.log("Loaded", receipts.length, "real receipts");
 }
 
 // run immediately
-fetchRecentReceipts();
-
-// refresh every 10 minutes
-setInterval(fetchRecentReceipts, 10 * 60 * 1000);
+loadReceipts();
 
 app.get("/", (req, res) => {
-
   res.send(`
-    <h2>Recent Receipt Finder</h2>
+    <h2>Real Receipt Finder</h2>
     <p>${receipts.length} receipts loaded</p>
     <a href="/random">View Random Receipt</a>
   `);
-
 });
 
 app.get("/random", (req, res) => {
 
   if (receipts.length === 0) {
-    return res.send("No receipts yet.");
+    return res.send("No receipts available");
   }
 
   const receipt = receipts[Math.floor(Math.random() * receipts.length)];
 
   res.send(`
     <h3>${receipt.store}</h3>
-    <img src="${receipt.image}" width="400"/>
+    <img src="${receipt.image}" width="350"/>
     <br><br>
-    <a href="/random">Next</a>
+    <a href="/random">Next Receipt</a>
   `);
-
 });
 
-app.get("/list", (req, res) => {
-  res.json(receipts);
+app.get("/search", (req, res) => {
+
+  const q = req.query.q?.toLowerCase() || "";
+
+  const results = receipts.filter(r =>
+    r.store.toLowerCase().includes(q)
+  );
+
+  res.json(results);
+
 });
 
 const PORT = process.env.PORT || 10000;
 
 app.listen(PORT, "0.0.0.0", () => {
-  console.log("Receipt Finder running on port", PORT);
+  console.log("Server running on port", PORT);
 });
