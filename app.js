@@ -8,14 +8,17 @@ app.use(express.json());
 
 let receipts = [];
 
-
-// Fetch real receipts from Reddit (past 7 days)
 async function fetchRecentReceipts() {
 
 try {
 
 const response = await fetch(
-"https://www.reddit.com/r/Receipts/new.json?limit=50"
+"https://www.reddit.com/r/Receipts/new.json?limit=100",
+{
+headers: {
+"User-Agent": "RealReceiptFinder/1.0"
+}
+}
 );
 
 const data = await response.json();
@@ -30,34 +33,38 @@ const ageDays =
 (1000 * 60 * 60 * 24);
 
 return {
+
 store: post.data.title || "Receipt",
+
 image: post.data.url,
+
 age: ageDays
+
 };
 
 })
 .filter(r =>
-r.image.match(/\.(jpg|jpeg|png)$/i) &&
-r.age <= 7
+r.image.match(/\.(jpg|jpeg|png)$/i)
+&& r.age <= 7
 );
 
-console.log("Receipts loaded:", receipts.length);
+console.log("Loaded receipts:", receipts.length);
 
-} catch (err) {
+} catch(err){
 
-console.log("Error loading receipts:", err);
-
-}
+console.log("Error:", err);
 
 }
 
+}
 
-// load immediately
+
+// run immediately
 fetchRecentReceipts();
 
 
-// refresh every 10 minutes
-setInterval(fetchRecentReceipts, 10 * 60 * 1000);
+// refresh every 5 minutes
+setInterval(fetchRecentReceipts, 5 * 60 * 1000);
 
 
 
@@ -66,7 +73,7 @@ app.get("/", (req,res)=>{
 res.send(`
 <h2>Real Receipt Finder</h2>
 <p>${receipts.length} recent receipts loaded</p>
-<a href="/random">View Random Receipt</a>
+<a href="/random">View Receipt</a>
 `);
 
 });
@@ -76,7 +83,7 @@ app.get("/random",(req,res)=>{
 
 if(receipts.length === 0){
 
-return res.send("No recent receipts found yet. Try again shortly.");
+return res.send("Loading receipts... refresh in 10 seconds.");
 
 }
 
@@ -84,6 +91,7 @@ const receipt =
 receipts[Math.floor(Math.random()*receipts.length)];
 
 res.send(`
+
 <h3>${receipt.store}</h3>
 
 <img src="${receipt.image}" width="400"/>
@@ -91,6 +99,7 @@ res.send(`
 <br><br>
 
 <a href="/random">Next Receipt</a>
+
 `);
 
 });
@@ -100,6 +109,6 @@ const PORT = process.env.PORT || 10000;
 
 app.listen(PORT,"0.0.0.0",()=>{
 
-console.log("Server running on port",PORT);
+console.log("Server running");
 
 });
