@@ -7,111 +7,151 @@ app.use(cors());
 app.use(express.json());
 
 let receipts = [];
+let index = 0;
 
 
-// Guaranteed working fallback receipts
+// Always working receipts
 const fallbackReceipts = [
 
 {
-store: "CVS Pharmacy",
+store: "CVS",
 image: "https://upload.wikimedia.org/wikipedia/commons/0/0b/ReceiptSwiss.jpg",
 source: "Dataset"
 },
 
 {
 store: "Target",
-image: "https://upload.wikimedia.org/wikipedia/commons/thumb/a/a4/Thermal_receipt.jpg/512px-Thermal_receipt.jpg",
+image: "https://upload.wikimedia.org/wikipedia/commons/a/a4/Thermal_receipt.jpg",
 source: "Dataset"
 },
 
 {
 store: "Walmart",
-image: "https://upload.wikimedia.org/wikipedia/commons/thumb/3/3a/Receipt_example.jpg/512px-Receipt_example.jpg",
+image: "https://upload.wikimedia.org/wikipedia/commons/3/3a/Receipt_example.jpg",
 source: "Dataset"
 },
 
 {
 store: "Walgreens",
-image: "https://upload.wikimedia.org/wikipedia/commons/thumb/1/1c/Receipt_%28Unsplash%29.jpg/512px-Receipt_%28Unsplash%29.jpg",
+image: "https://upload.wikimedia.org/wikipedia/commons/1/1c/Receipt_%28Unsplash%29.jpg",
 source: "Dataset"
 }
 
 ];
 
 
-// Fetch real recent receipts from Reddit
-async function fetchRecentReceipts() {
 
-try {
+// Validate image actually exists
+async function isValidImage(url){
 
-console.log("Fetching Reddit receipts...");
+try{
+
+const res = await fetch(url,{method:"HEAD"});
+
+return res.ok &&
+res.headers.get("content-type")?.includes("image");
+
+}catch{
+
+return false;
+
+}
+
+}
+
+
+
+// Fetch Reddit receipts safely
+async function fetchRedditReceipts(){
+
+try{
 
 const response = await fetch(
-"https://www.reddit.com/r/Receipts/new.json?limit=100",
+"https://www.reddit.com/r/Receipts/new.json?limit=50",
 {
-headers: {
-"User-Agent": "RealReceiptFinder/1.0"
+headers:{
+"User-Agent":"receipt-app"
 }
 }
 );
 
 const data = await response.json();
 
-const now = Date.now();
+const validReceipts = [];
 
-const redditReceipts = data.data.children
-.map(post => {
+for(const post of data.data.children){
 
-const ageDays =
-(now - post.data.created_utc * 1000) /
-(1000 * 60 * 60 * 24);
+const url = post.data.url;
 
-return {
+if(
+url &&
+url.match(/\.(jpg|jpeg|png)$/i)
+){
+
+const valid = await isValidImage(url);
+
+if(valid){
+
+validReceipts.push({
 
 store: post.data.title || "Receipt",
 
-image: post.data.url,
+image: url,
 
-source: "Reddit",
+source: "Reddit"
 
-age: ageDays
-
-};
-
-})
-.filter(r =>
-r.image.match(/\.(jpg|jpeg|png)$/i)
-&& r.age <= 7
-);
-
-console.log("Reddit receipts loaded:", redditReceipts.length);
-
-
-// Combine Reddit + fallback
-receipts = [...redditReceipts, ...fallbackReceipts];
-
-} catch(err){
-
-console.log("Reddit fetch failed, using fallback only");
-
-receipts = [...fallbackReceipts];
+});
 
 }
 
 }
+
+}
+
+return validReceipts;
+
+}catch{
+
+return [];
+
+}
+
+}
+
+
+
+// Load receipts
+async function loadReceipts(){
+
+console.log("Loading receipts...");
+
+const reddit = await fetchRedditReceipts();
+
+receipts = [
+
+...reddit,
+
+...fallbackReceipts
+
+];
+
+console.log("Receipts loaded:", receipts.length);
+
+}
+
 
 
 // Run immediately
-fetchRecentReceipts();
+loadReceipts();
 
 
 // Refresh every 5 minutes
-setInterval(fetchRecentReceipts, 5 * 60 * 1000);
+setInterval(loadReceipts,300000);
 
 
 
 // Homepage
-app.get("/", (req,res)=>{
+app.get("/",(req,res)=>{
 
 res.send(`
 
@@ -119,7 +159,7 @@ res.send(`
 
 <p>${receipts.length} receipts loaded</p>
 
-<a href="/random">View Random Receipt</a>
+<a href="/random">View Receipt</a>
 
 `);
 
@@ -127,7 +167,7 @@ res.send(`
 
 
 
-// Random receipt
+// Next receipt (no repeats until cycle complete)
 app.get("/random",(req,res)=>{
 
 if(receipts.length === 0){
@@ -136,8 +176,15 @@ return res.send("Loading receipts... refresh shortly.");
 
 }
 
-const receipt =
-receipts[Math.floor(Math.random()*receipts.length)];
+const receipt = receipts[index];
+
+index++;
+
+if(index >= receipts.length){
+
+index = 0;
+
+}
 
 res.send(`
 
@@ -161,6 +208,6 @@ const PORT = process.env.PORT || 10000;
 
 app.listen(PORT,"0.0.0.0",()=>{
 
-console.log("Server running on port", PORT);
+console.log("Server running on port",PORT);
 
 });
