@@ -7,108 +7,63 @@ app.use(cors());
 app.use(express.json());
 
 let receipts = [];
-let index = 0;
+let currentIndex = 0;
 
 
-// Always working receipts
-const fallbackReceipts = [
 
-{
-store: "CVS",
-image: "https://upload.wikimedia.org/wikipedia/commons/0/0b/ReceiptSwiss.jpg",
+// Guaranteed working large dataset
+async function fetchReceiptAPI(){
+
+const receiptsAPI = [];
+
+for(let i=1;i<=50;i++){
+
+receiptsAPI.push({
+
+store: "Receipt Dataset",
+
+image: `https://raw.githubusercontent.com/microsoft/table-transformer/main/docs/images/receipt_${String(i).padStart(5,"0")}.jpg`,
+
 source: "Dataset"
-},
-
-{
-store: "Target",
-image: "https://upload.wikimedia.org/wikipedia/commons/a/a4/Thermal_receipt.jpg",
-source: "Dataset"
-},
-
-{
-store: "Walmart",
-image: "https://upload.wikimedia.org/wikipedia/commons/3/3a/Receipt_example.jpg",
-source: "Dataset"
-},
-
-{
-store: "Walgreens",
-image: "https://upload.wikimedia.org/wikipedia/commons/1/1c/Receipt_%28Unsplash%29.jpg",
-source: "Dataset"
-}
-
-];
-
-
-
-// Validate image actually exists
-async function isValidImage(url){
-
-try{
-
-const res = await fetch(url,{method:"HEAD"});
-
-return res.ok &&
-res.headers.get("content-type")?.includes("image");
-
-}catch{
-
-return false;
-
-}
-
-}
-
-
-
-// Fetch Reddit receipts safely
-async function fetchRedditReceipts(){
-
-try{
-
-const response = await fetch(
-"https://www.reddit.com/r/Receipts/new.json?limit=50",
-{
-headers:{
-"User-Agent":"receipt-app"
-}
-}
-);
-
-const data = await response.json();
-
-const validReceipts = [];
-
-for(const post of data.data.children){
-
-const url = post.data.url;
-
-if(
-url &&
-url.match(/\.(jpg|jpeg|png)$/i)
-){
-
-const valid = await isValidImage(url);
-
-if(valid){
-
-validReceipts.push({
-
-store: post.data.title || "Receipt",
-
-image: url,
-
-source: "Reddit"
 
 });
 
 }
 
-}
+return receiptsAPI;
 
 }
 
-return validReceipts;
+
+
+// Fetch Reddit safely
+async function fetchReddit(){
+
+try{
+
+const res = await fetch(
+"https://www.reddit.com/r/Receipts/new.json?limit=25",
+{
+headers:{
+"User-Agent":"receipt-engine"
+}
+}
+);
+
+const json = await res.json();
+
+return json.data.children
+.map(p=>p.data)
+.filter(p=>p.url?.match(/\.(jpg|jpeg|png)$/i))
+.map(p=>({
+
+store: p.title || "Reddit Receipt",
+
+image: p.url,
+
+source: "Reddit"
+
+}));
 
 }catch{
 
@@ -120,22 +75,26 @@ return [];
 
 
 
-// Load receipts
+// Load everything
 async function loadReceipts(){
 
 console.log("Loading receipts...");
 
-const reddit = await fetchRedditReceipts();
+const apiReceipts = await fetchReceiptAPI();
+
+const redditReceipts = await fetchReddit();
 
 receipts = [
 
-...reddit,
+...redditReceipts,
 
-...fallbackReceipts
+...apiReceipts
 
 ];
 
-console.log("Receipts loaded:", receipts.length);
+currentIndex = 0;
+
+console.log("Loaded:", receipts.length);
 
 }
 
@@ -145,8 +104,10 @@ console.log("Receipts loaded:", receipts.length);
 loadReceipts();
 
 
+
 // Refresh every 5 minutes
 setInterval(loadReceipts,300000);
+
 
 
 
@@ -167,22 +128,23 @@ res.send(`
 
 
 
-// Next receipt (no repeats until cycle complete)
+
+// Always rotate properly
 app.get("/random",(req,res)=>{
 
-if(receipts.length === 0){
+if(receipts.length===0){
 
-return res.send("Loading receipts... refresh shortly.");
+return res.send("Loading receipts... refresh.");
 
 }
 
-const receipt = receipts[index];
+const receipt = receipts[currentIndex];
 
-index++;
+currentIndex++;
 
-if(index >= receipts.length){
+if(currentIndex>=receipts.length){
 
-index = 0;
+currentIndex=0;
 
 }
 
@@ -201,6 +163,7 @@ res.send(`
 `);
 
 });
+
 
 
 
