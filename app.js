@@ -8,170 +8,131 @@ app.use(express.json());
 
 let receipts = [];
 
-const MAX_AGE_DAYS = 7;
 
-function isImage(url) {
-return url.match(/\.(jpg|jpeg|png)$/i);
+// Guaranteed working fallback receipts
+const fallbackReceipts = [
+
+{
+store: "CVS Pharmacy",
+image: "https://upload.wikimedia.org/wikipedia/commons/0/0b/ReceiptSwiss.jpg",
+source: "Dataset"
+},
+
+{
+store: "Target",
+image: "https://upload.wikimedia.org/wikipedia/commons/thumb/a/a4/Thermal_receipt.jpg/512px-Thermal_receipt.jpg",
+source: "Dataset"
+},
+
+{
+store: "Walmart",
+image: "https://upload.wikimedia.org/wikipedia/commons/thumb/3/3a/Receipt_example.jpg/512px-Receipt_example.jpg",
+source: "Dataset"
+},
+
+{
+store: "Walgreens",
+image: "https://upload.wikimedia.org/wikipedia/commons/thumb/1/1c/Receipt_%28Unsplash%29.jpg/512px-Receipt_%28Unsplash%29.jpg",
+source: "Dataset"
 }
 
-function ageDays(createdUtc) {
-return (Date.now() - createdUtc * 1000) / (1000*60*60*24);
-}
+];
 
 
-// REDDIT SOURCE
-async function fetchRedditReceipts() {
+// Fetch real recent receipts from Reddit
+async function fetchRecentReceipts() {
 
 try {
+
+console.log("Fetching Reddit receipts...");
 
 const response = await fetch(
 "https://www.reddit.com/r/Receipts/new.json?limit=100",
 {
 headers: {
-"User-Agent": "ReceiptFinderBot/1.0"
+"User-Agent": "RealReceiptFinder/1.0"
 }
 }
 );
 
-const json = await response.json();
+const data = await response.json();
 
-const redditReceipts =
-json.data.children
-.map(p => ({
-store: p.data.title,
-image: p.data.url,
-age: ageDays(p.data.created_utc),
-source: "Reddit"
-}))
+const now = Date.now();
+
+const redditReceipts = data.data.children
+.map(post => {
+
+const ageDays =
+(now - post.data.created_utc * 1000) /
+(1000 * 60 * 60 * 24);
+
+return {
+
+store: post.data.title || "Receipt",
+
+image: post.data.url,
+
+source: "Reddit",
+
+age: ageDays
+
+};
+
+})
 .filter(r =>
-isImage(r.image) &&
-r.age <= MAX_AGE_DAYS
+r.image.match(/\.(jpg|jpeg|png)$/i)
+&& r.age <= 7
 );
 
-return redditReceipts;
-
-} catch {
-return [];
-}
-
-}
+console.log("Reddit receipts loaded:", redditReceipts.length);
 
 
-// IMGUR SOURCE
-async function fetchImgurReceipts() {
+// Combine Reddit + fallback
+receipts = [...redditReceipts, ...fallbackReceipts];
 
-try {
+} catch(err){
 
-const response = await fetch(
-"https://api.imgur.com/3/gallery/search/time/receipt",
-{
-headers: {
-Authorization: "Client-ID 546c25a59c58ad7"
-}
-}
-);
+console.log("Reddit fetch failed, using fallback only");
 
-const json = await response.json();
-
-const imgurReceipts =
-json.data
-.filter(p => p.link && isImage(p.link))
-.slice(0,20)
-.map(p => ({
-store: p.title || "Imgur Receipt",
-image: p.link,
-age: 0,
-source: "Imgur"
-}));
-
-return imgurReceipts;
-
-} catch {
-
-return [];
+receipts = [...fallbackReceipts];
 
 }
 
 }
 
 
-// PUBLIC DATASET SOURCE (stable backup)
-async function fetchDatasetReceipts() {
-
-return [
-
-{
-store: "Dataset Walmart",
-image: "https://raw.githubusercontent.com/clovaai/cord/master/sample_dataset/images/receipt_00001.jpg",
-age: 0,
-source: "Dataset"
-},
-
-{
-store: "Dataset Target",
-image: "https://raw.githubusercontent.com/clovaai/cord/master/sample_dataset/images/receipt_00002.jpg",
-age: 0,
-source: "Dataset"
-},
-
-{
-store: "Dataset CVS",
-image: "https://raw.githubusercontent.com/clovaai/cord/master/sample_dataset/images/receipt_00003.jpg",
-age: 0,
-source: "Dataset"
-}
-
-];
-
-}
+// Run immediately
+fetchRecentReceipts();
 
 
-// MASTER FETCH
-async function refreshReceipts() {
-
-console.log("Fetching receipts...");
-
-const reddit = await fetchRedditReceipts();
-const imgur = await fetchImgurReceipts();
-const dataset = await fetchDatasetReceipts();
-
-receipts = [
-...reddit,
-...imgur,
-...dataset
-];
-
-console.log("Total receipts loaded:", receipts.length);
-
-}
-
-
-// run immediately
-refreshReceipts();
-
-// refresh every 5 minutes
-setInterval(refreshReceipts, 5 * 60 * 1000);
+// Refresh every 5 minutes
+setInterval(fetchRecentReceipts, 5 * 60 * 1000);
 
 
 
-// ROUTES
-
+// Homepage
 app.get("/", (req,res)=>{
 
 res.send(`
-<h2>Real Receipt Engine</h2>
+
+<h2>Real Receipt Finder</h2>
+
 <p>${receipts.length} receipts loaded</p>
-<a href="/random">View Receipt</a>
+
+<a href="/random">View Random Receipt</a>
+
 `);
 
 });
 
 
+
+// Random receipt
 app.get("/random",(req,res)=>{
 
 if(receipts.length === 0){
 
-return res.send("Loading receipts... refresh in 10 seconds.");
+return res.send("Loading receipts... refresh shortly.");
 
 }
 
@@ -195,17 +156,11 @@ res.send(`
 });
 
 
-app.get("/api/receipts",(req,res)=>{
-
-res.json(receipts);
-
-});
-
 
 const PORT = process.env.PORT || 10000;
 
 app.listen(PORT,"0.0.0.0",()=>{
 
-console.log("Receipt engine running");
+console.log("Server running on port", PORT);
 
 });
